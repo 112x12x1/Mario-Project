@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 using MarioGameSystem.DAL;
@@ -10,23 +11,30 @@ namespace MarioGameSystem.Forms.GameEngine
     public partial class frmGamePlay : Form
     {
         private Timer gameLoopTimer = null!;
-        private PictureBox mario = null!;
-        private Label lblScore = null!, lblTime = null!, lblSound = null!;
+        private PictureBox mario = null!, flagGoal = null!;
+        private Label lblScore = null!, lblTime = null!, lblSound = null!, lblLevel = null!;
 
-        private bool goLeft, goRight, jumping;
-        private int jumpSpeed = 12, gravity = 8, playerSpeed = 6;
-        private int score = 0, timeRemaining = 100, ticks = 0;
+        private bool goLeft, goRight, jumping, isGrounded;
+        private int jumpSpeed = 16, jumpForce = 16, gravity = 12, playerSpeed = 7;
+        private int score = 0, timeRemaining = 60, ticks = 0;
+        private int cameraOffsetX = 0;
 
         private ScoreManager scoreManager = null!;
         private SoundManager soundManager = null!;
         private string currentPlayer = string.Empty;
+        private LevelConfig currentLevelConfig = null!;
+        private List<EnemyControl> enemyList = new List<EnemyControl>();
 
-        public frmGamePlay(string playerName)
+        public frmGamePlay(string playerName, int levelNumber = 1)
         {
+            currentPlayer = playerName;
+            currentLevelConfig = LevelRepository.GetLevel(levelNumber);
+            timeRemaining = currentLevelConfig.TimeLimit;
+
             InitControls();
+
             try
             {
-                currentPlayer = playerName;
                 scoreManager = new ScoreManager("scores.txt");
                 soundManager = new SoundManager("bgm.wav", "jump.wav");
                 soundManager.PlayBGM();
@@ -40,25 +48,41 @@ namespace MarioGameSystem.Forms.GameEngine
         private void InitControls()
         {
             this.ClientSize = new Size(800, 450);
-            this.Text = "Super Mario Engine (.NET 10)";
+            this.Text = $"Super Mario - {currentLevelConfig.LevelName}";
             this.DoubleBuffered = true;
             this.KeyPreview = true;
 
-            lblScore = new Label { Text = "Score: 0", Location = new Point(10, 10), AutoSize = true, Font = new Font("Arial", 12, FontStyle.Bold) };
-            lblTime = new Label { Text = "Time: 100", Location = new Point(150, 10), AutoSize = true, Font = new Font("Arial", 12, FontStyle.Bold) };
-            lblSound = new Label { Text = "🔊 Sound: ON", Location = new Point(680, 10), AutoSize = true, Cursor = Cursors.Hand };
+            lblLevel = new Label { Text = currentLevelConfig.LevelName, Location = new Point(10, 10), AutoSize = true, Font = new Font("Arial", 11, FontStyle.Bold) };
+            lblScore = new Label { Text = "Score: 0", Location = new Point(300, 10), AutoSize = true, Font = new Font("Arial", 11, FontStyle.Bold) };
+            lblTime = new Label { Text = $"Time: {timeRemaining}", Location = new Point(440, 10), AutoSize = true, Font = new Font("Arial", 11, FontStyle.Bold) };
+            lblSound = new Label { Text = "🔊 Sound: ON", Location = new Point(670, 10), AutoSize = true, Cursor = Cursors.Hand, Font = new Font("Arial", 11, FontStyle.Bold) };
+
             lblSound.Click += (s, e) => {
                 soundManager.IsMuted = !soundManager.IsMuted;
                 lblSound.Text = soundManager.IsMuted ? "🔇 Sound: OFF" : "🔊 Sound: ON";
             };
 
-            mario = new PictureBox { Size = new Size(30, 40), BackColor = Color.Red, Location = new Point(50, 300) };
+            mario = new PictureBox { Size = new Size(30, 40), BackColor = Color.Red, Location = currentLevelConfig.StartPoint };
+            flagGoal = new PictureBox { Size = new Size(25, 40), BackColor = Color.Green, Location = currentLevelConfig.GoalPoint, Tag = "goal" };
 
-            this.Controls.AddRange(new Control[] { lblScore, lblTime, lblSound, mario });
+            this.Controls.AddRange(new Control[] { lblLevel, lblScore, lblTime, lblSound, mario, flagGoal });
 
-            BuildPlatform(0, 380, 800, 70);
-            BuildPlatform(200, 270, 120, 20);
-            BuildCoin(240, 230);
+            foreach (var p in currentLevelConfig.Platforms)
+            {
+                BuildPlatform(p.Bounds.X, p.Bounds.Y, p.Bounds.Width, p.Bounds.Height, p.Color);
+            }
+
+            foreach (var c in currentLevelConfig.Coins)
+            {
+                BuildCoin(c.Location.X, c.Location.Y);
+            }
+
+            foreach (var e in currentLevelConfig.Enemies)
+            {
+                EnemyControl enemy = new EnemyControl(e.Location, e.MoveRange, e.Speed);
+                enemyList.Add(enemy);
+                this.Controls.Add(enemy.Picture);
+            }
 
             gameLoopTimer = new Timer { Interval = 20 };
             gameLoopTimer.Tick += GameLoop;
@@ -67,7 +91,12 @@ namespace MarioGameSystem.Forms.GameEngine
             this.KeyDown += (s, e) => {
                 if (e.KeyCode == Keys.Left) goLeft = true;
                 if (e.KeyCode == Keys.Right) goRight = true;
-                if (e.KeyCode == Keys.Space && !jumping) { jumping = true; jumpSpeed = 12; }
+                if ((e.KeyCode == Keys.Space || e.KeyCode == Keys.Up) && isGrounded && !jumping)
+                {
+                    jumping = true;
+                    isGrounded = false;
+                    jumpSpeed = jumpForce;
+                }
             };
 
             this.KeyUp += (s, e) => {
@@ -76,9 +105,9 @@ namespace MarioGameSystem.Forms.GameEngine
             };
         }
 
-        private void BuildPlatform(int x, int y, int w, int h)
+        private void BuildPlatform(int x, int y, int w, int h, Color color)
         {
-            PictureBox p = new PictureBox { Location = new Point(x, y), Size = new Size(w, h), BackColor = Color.SaddleBrown, Tag = "platform" };
+            PictureBox p = new PictureBox { Location = new Point(x, y), Size = new Size(w, h), BackColor = color, Tag = "platform" };
             this.Controls.Add(p);
         }
 
@@ -97,27 +126,100 @@ namespace MarioGameSystem.Forms.GameEngine
                 {
                     timeRemaining--;
                     lblTime.Text = "Time: " + timeRemaining;
-                    if (timeRemaining <= 0) EndGame("Time Expired!");
+                    if (timeRemaining <= 0) EndGame("Time Expired!", false);
                 }
 
-                mario.Top += gravity;
+                // Di chuyển di động Mario & Cuộn Camera
+                if (goLeft && mario.Left > 0)
+                {
+                    mario.Left -= playerSpeed;
+                }
+                if (goRight)
+                {
+                    if (mario.Left < 400 || cameraOffsetX >= currentLevelConfig.MapWidth - this.ClientSize.Width)
+                    {
+                        if (mario.Left + mario.Width < this.ClientSize.Width) mario.Left += playerSpeed;
+                    }
+                    else
+                    {
+                        // Cuộn màn hình (Camera Offset)
+                        int moveShift = playerSpeed;
+                        cameraOffsetX += moveShift;
 
+                        foreach (Control ctrl in this.Controls)
+                        {
+                            if (ctrl != mario && ctrl != lblLevel && ctrl != lblScore && ctrl != lblTime && ctrl != lblSound)
+                            {
+                                ctrl.Left -= moveShift;
+                            }
+                        }
+
+                        foreach (var enemy in enemyList)
+                        {
+                            enemy.StartX -= moveShift;
+                        }
+                    }
+                }
+
+                // Xử lý nhảy & Trọng lực
                 if (jumping)
                 {
                     mario.Top -= jumpSpeed;
                     jumpSpeed -= 1;
-                    if (jumpSpeed < 0) jumping = false;
+                    if (jumpSpeed <= 0) jumping = false;
+                }
+                else
+                {
+                    mario.Top += gravity;
                 }
 
-                if (goLeft && mario.Left > 0) mario.Left -= playerSpeed;
-                if (goRight && mario.Left + mario.Width < this.ClientSize.Width) mario.Left += playerSpeed;
+                isGrounded = false;
 
+                // Xử lý Kẻ địch
+                foreach (var enemy in enemyList)
+                {
+                    if (!enemy.IsAlive) continue;
+
+                    enemy.UpdateMovement();
+
+                    if (mario.Bounds.IntersectsWith(enemy.Picture.Bounds))
+                    {
+                        // Kiểm tra giẫm lên đầu (Mario đang rơi xuống)
+                        if (!jumping && mario.Top + mario.Height - gravity <= enemy.Picture.Top + 12)
+                        {
+                            enemy.IsAlive = false;
+                            enemy.Picture.Visible = false;
+                            score += 20;
+                            lblScore.Text = "Score: " + score;
+                            soundManager.PlaySFX();
+
+                            // Mario nẩy lên nhẹ khi tiêu diệt quái
+                            jumping = true;
+                            jumpSpeed = 10;
+                        }
+                        else
+                        {
+                            EndGame("Mario đã bị Kẻ Địch tiêu diệt!", false);
+                            return;
+                        }
+                    }
+                }
+
+                // Va chạm Sàn & Coin
                 foreach (Control ctrl in this.Controls)
                 {
                     if (ctrl is PictureBox pb && (string)pb.Tag == "platform")
                     {
-                        if (mario.Bounds.IntersectsWith(pb.Bounds) && !jumping) mario.Top = pb.Top - mario.Height;
+                        if (mario.Bounds.IntersectsWith(pb.Bounds))
+                        {
+                            if (!jumping && mario.Top + mario.Height - gravity <= pb.Top + 10)
+                            {
+                                mario.Top = pb.Top - mario.Height;
+                                isGrounded = true;
+                            }
+                        }
                     }
+
                     if (ctrl is PictureBox coin && (string)coin.Tag == "coin" && coin.Visible)
                     {
                         if (mario.Bounds.IntersectsWith(coin.Bounds))
@@ -130,7 +232,12 @@ namespace MarioGameSystem.Forms.GameEngine
                     }
                 }
 
-                if (mario.Top > this.ClientSize.Height) EndGame("Mario Fell!");
+                if (mario.Bounds.IntersectsWith(flagGoal.Bounds))
+                {
+                    EndGame($"VICTORY! Bạn đã vượt qua {currentLevelConfig.LevelName}!", true);
+                }
+
+                if (mario.Top > this.ClientSize.Height) EndGame("Mario rơi xuống vực!", false);
             }
             catch (Exception ex)
             {
@@ -139,12 +246,12 @@ namespace MarioGameSystem.Forms.GameEngine
             }
         }
 
-        private void EndGame(string msg)
+        private void EndGame(string msg, bool isWin)
         {
             gameLoopTimer.Stop();
             soundManager.StopBGM();
             try { scoreManager.SaveScore(currentPlayer, score); } catch { }
-            MessageBox.Show($"{msg}\nScore: {score}", "Game Over");
+            MessageBox.Show($"{msg}\nTổng điểm: {score}", isWin ? "Chiến Thắng" : "Game Over");
             this.Close();
         }
     }

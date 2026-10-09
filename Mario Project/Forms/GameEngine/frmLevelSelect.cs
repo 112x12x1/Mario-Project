@@ -13,16 +13,41 @@ namespace MarioGameSystem.Forms.GameEngine
 
         private void InitControls()
         {
-            this.ClientSize = new Size(400, 300);
+            this.ClientSize = new Size(450, 250);
             this.Text = "Select Level";
+            this.StartPosition = FormStartPosition.CenterScreen;
 
-            Button btn1 = new Button { Text = "Level 1", Location = new Point(50, 50), Size = new Size(100, 40) };
-            btn1.Click += (s, e) => {
-                frmGamePlay game = new frmGamePlay("Player1");
-                game.ShowDialog();
+            Label lblTitle = new Label
+            {
+                Text = "CHỌN MÀN CHƠI",
+                Font = new Font("Arial", 16, FontStyle.Bold),
+                Location = new Point(120, 20),
+                AutoSize = true
             };
+            this.Controls.Add(lblTitle);
 
-            this.Controls.Add(btn1);
+            for (int i = 1; i <= 3; i++)
+            {
+                int levelNum = i;
+                Button btnLevel = new Button
+                {
+                    Text = $"Level {levelNum}",
+                    Font = new Font("Arial", 11, FontStyle.Bold),
+                    Location = new Point(50 + (i - 1) * 120, 100),
+                    Size = new Size(100, 50),
+                    BackColor = Color.LightSkyBlue
+                };
+
+                btnLevel.Click += (s, e) =>
+                {
+                    frmGamePlay game = new frmGamePlay("Player1", levelNum);
+                    this.Hide();
+                    game.ShowDialog();
+                    this.Show();
+                };
+
+                this.Controls.Add(btnLevel);
+            }
         }
     }
 }
