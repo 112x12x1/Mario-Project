@@ -1,0 +1,15 @@
+D:\Mario Project\obj\Debug\net10.0-windows\MarioGameSystem.GeneratedMSBuildEditorConfig.editorconfig
+D:\Mario Project\obj\Debug\net10.0-windows\MarioGameSystem.AssemblyInfoInputs.cache
+D:\Mario Project\obj\Debug\net10.0-windows\MarioGameSystem.AssemblyInfo.cs
+D:\Mario Project\obj\Debug\net10.0-windows\MarioGameSystem.csproj.CoreCompileInputs.cache
+d:\Mario Project\bin\Debug\net10.0-windows\MarioGameSystem.exe
+d:\Mario Project\bin\Debug\net10.0-windows\MarioGameSystem.dll.config
+D:\Mario Project\bin\Debug\net10.0-windows\MarioGameSystem.deps.json
+D:\Mario Project\bin\Debug\net10.0-windows\MarioGameSystem.runtimeconfig.json
+d:\Mario Project\bin\Debug\net10.0-windows\MarioGameSystem.dll
+d:\Mario Project\bin\Debug\net10.0-windows\MarioGameSystem.pdb
+d:\Mario Project\obj\Debug\net10.0-windows\MarioGameSystem.dll
+d:\Mario Project\obj\Debug\net10.0-windows\refint\MarioGameSystem.dll
+d:\Mario Project\obj\Debug\net10.0-windows\MarioGameSystem.pdb
+D:\Mario Project\obj\Debug\net10.0-windows\MarioGameSystem.genruntimeconfig.cache
+D:\Mario Project\obj\Debug\net10.0-windows\ref\MarioGameSystem.dll
